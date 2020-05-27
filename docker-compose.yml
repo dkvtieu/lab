@@ -1,0 +1,71 @@
+version: "3.7"
+
+services:
+  traefik:
+    image: traefik:v2.1
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+      - ./traefik/traefik.toml:/etc/traefik/traefik.toml
+      - ./traefik/traefik_dashboard_users_file:/traefik_dashboard_users_file:ro
+    labels:
+      - "traefik.enable=true"
+      ## Traefik Dashboard
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.rule=Host(`traefik.lab.davisontieu.com`)"
+      - "traefik.http.routers.api.service=api@internal"
+      - "traefik.http.routers.api.tls.certresolver=lab_cert"
+      - "traefik.http.routers.api.middlewares=traefik_dashboard_auth"
+      - "traefik.http.middlewares.traefik_dashboard_auth.basicauth.usersfile=/traefik_dashboard_users_file"
+      ## HTTP REDIRECT MIDDLEWARE
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.redirect-https.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.redirect-https.entrypoints=web"
+      - "traefik.http.routers.redirect-https.middlewares=redirect-to-https"
+
+  monica_web_app:
+    image: jc5x/monica-multi-arch
+    env_file: ./monica/monica.env
+    volumes:
+      - monica_data:/var/www/storage
+    restart: always
+    depends_on: 
+      - monica_db
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.monica_router.entrypoints=websecure"
+      - "traefik.http.routers.monica_router.rule=Host(`monica.lab.davisontieu.com`)"
+      - "traefik.http.routers.monica_router.tls.certresolver=lab_cert"
+
+  monica_db:
+    image: hypriot/rpi-mysql:latest
+    env_file: ./monica/monica-db.env
+    volumes:
+      - monica_db:/var/lib/mysql
+    restart: always
+
+  trilium:
+    image: hlince/trilium:0.38.3-stable-arm
+    restart: always
+    ports:
+      - "3001:8080"
+    volumes:
+      - trilium_data:/root/trilium-data 
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.trilium_router.entrypoints=websecure"
+      - "traefik.http.routers.trilium_router.rule=Host(`trilium.lab.davisontieu.com`)"
+      - "traefik.http.routers.trilium_router.tls.certresolver=lab_cert"
+
+volumes:
+  monica_data:
+    name: monica_data
+  monica_db:
+    name: monica_db
+  trilium_data:
+    name: trilium_data
+
